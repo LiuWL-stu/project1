@@ -102,7 +102,33 @@ def skip(
     if need_sigmoid:
         model.add(nn.Sigmoid())
 
-    return model
+    # 额外增加标准差输出层
+    std_layer = nn.Conv2d(output_channels, output_channels, kernel_size=1)
+    return model std_layer
+
+# VDIP 生成器类
+class VDIPGenerator(nn.Module):
+    """ VDIP 生成器，输出均值和标准差 """
+    def __init__(self, input_depth, output_channels, num_channels_down, num_channels_up, num_channels_skip):
+        super(VDIPGenerator, self).__init__()
+
+        # 原始 DIP 生成器（用于生成均值）
+        self.mean_generator, self.std_layer = skip(
+            input_depth, output_channels,
+            num_channels_down=num_channels_down,
+            num_channels_up=num_channels_up,
+            num_channels_skip=num_channels_skip,
+            upsample_mode='bilinear',
+            need_sigmoid=True,
+            need_bias=True,
+            pad='reflection',
+            act_fun='LeakyReLU'
+        )
+
+    def forward(self, z):
+        mean_output = self.mean_generator(z)  # 生成均值
+        std_output = self.std_layer(mean_output)  # 生成标准差
+        return mean_output, F.softplus(std_output)  # 确保标准差为正
 
 if __name__ == '__main__':
     from torchsummary import summary
