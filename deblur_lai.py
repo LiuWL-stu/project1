@@ -4,6 +4,8 @@ import argparse
 import os
 
 from networks.skip import skip
+from networks.skip import VDIPGenerator  # 导入 VDIP 生成器
+
 import glob
 from skimage.io import imsave
 import warnings
@@ -58,6 +60,9 @@ def get_kernel_network(kernel_size):
 
     return netE, netG
 
+def kl_divergence(mean, std):
+    """计算 KL 散度: 约束潜在空间分布"""
+    return -0.5 * torch.sum(1 + torch.log(std**2) - mean**2 - std**2)
 
 
 for f in files_source:
@@ -97,12 +102,25 @@ for f in files_source:
 
     net_input = get_noise(input_depth, INPUT, (opt.img_size[0], opt.img_size[1])).type(dtype)
 
-    net = skip(input_depth, 3,
-                num_channels_down=[128, 128, 128, 128, 128],
-                num_channels_up=[128, 128, 128, 128, 128],
-                num_channels_skip=[16, 16, 16, 16, 16],
-                upsample_mode='bilinear',
-                need_sigmoid=True, need_bias=True, pad=pad, act_fun='LeakyReLU')
+    # net = skip(input_depth, 3,
+    #             num_channels_down=[128, 128, 128, 128, 128],
+    #             num_channels_up=[128, 128, 128, 128, 128],
+    #             num_channels_skip=[16, 16, 16, 16, 16],
+    #             upsample_mode='bilinear',
+    #             need_sigmoid=True, need_bias=True, pad=pad, act_fun='LeakyReLU')
+    # 替换原有的 DIP 网络，使用 VDIP
+    net = VDIPGenerator(
+        input_depth=8,
+        output_channels=3,
+        num_channels_down=[128, 128, 128, 128, 128],
+        num_channels_up=[128, 128, 128, 128, 128],
+        num_channels_skip=[16, 16, 16, 16, 16],
+        upsample_mode='bilinear',  # 可以选择 'bilinear', 'nearest' 等上采样模式
+        need_sigmoid=True,
+        need_bias=True,
+        pad='reflection',  # 填充方式
+        act_fun='LeakyReLU'  # 激活函数
+    ).cuda()
 
     net = net.type(dtype)
 
@@ -114,6 +132,7 @@ for f in files_source:
     # Losses
     mse = torch.nn.MSELoss().type(dtype)
     ssim = SSIM().type(dtype)
+    beta=0.01
 
     optimizerI = torch.optim.Adam([{'params': net.parameters()}, {'params': [w], 'lr': 5e-4}], lr=LR)
     schedulerI = MultiStepLR(optimizerI, milestones=[2000, 3000, 4000], gamma=0.5)
@@ -148,7 +167,7 @@ for f in files_source:
         optimizerI.zero_grad()
 
         # get the network output
-        out_x = net(net_input)
+        out_x,std = net(net_input)# 前向传播，生成均值和标准差
         out_k = netG.Gk(w)
         out_img = F.conv2d(out_x, out_k.repeat(3, 1, 1, 1), groups=3)
 
@@ -156,6 +175,10 @@ for f in files_source:
             total_loss = mse(out_img, img_blur)
         else:
             total_loss = 1 - ssim(out_img, img_blur)
+        kl_loss = kl_divergence(out_x, std)
+        # 总损失 = 复原损失 + KL 散度
+        total_loss = total_loss + beta * kl_loss
+
         total_loss.backward()
         optimizerI.step()
 

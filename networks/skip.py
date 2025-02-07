@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+
 from .common import *
 
 from .non_local_dot_product import NONLocalBlock2D
@@ -103,8 +105,8 @@ def skip(
         model.add(nn.Sigmoid())
 
     # 额外增加标准差输出层
-    std_layer = nn.Conv2d(output_channels, output_channels, kernel_size=1)
-    return model std_layer
+    std_layer = nn.Conv2d(num_output_channels, num_output_channels, kernel_size=1)
+    return model,std_layer
 
 # VDIP 生成器类
 class VDIPGenerator(nn.Module):
