@@ -111,7 +111,8 @@ def skip(
 # VDIP 生成器类
 class VDIPGenerator(nn.Module):
     """ VDIP 生成器，输出均值和标准差 """
-    def __init__(self, input_depth, output_channels, num_channels_down, num_channels_up, num_channels_skip):
+    def __init__(self, input_depth, output_channels, num_channels_down, num_channels_up, num_channels_skip,
+                 upsample_mode='bilinear', need_sigmoid=True, need_bias=True, pad='reflection', act_fun='LeakyReLU'):
         super(VDIPGenerator, self).__init__()
 
         # 原始 DIP 生成器（用于生成均值）
@@ -120,7 +121,7 @@ class VDIPGenerator(nn.Module):
             num_channels_down=num_channels_down,
             num_channels_up=num_channels_up,
             num_channels_skip=num_channels_skip,
-            upsample_mode='bilinear',
+            upsample_mode='nearest',
             need_sigmoid=True,
             need_bias=True,
             pad='reflection',
